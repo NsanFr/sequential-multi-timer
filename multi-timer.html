@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sequential Multi-Timer (OLED Black)</title>
+  <style>
+    :root {
+      --bg-color: #000000;
+      --surface-dark: #0a0a0a;
+      --card-bg: #111111;
+      --card-border: #222222;
+      --text-color: #ffffff;
+      --text-muted: #888888;
+      --timer-color: #ffffff;
+      --timer-font: 'Arial Black', sans-serif;
+      --timer-weight: 500;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    /* Auto-fade UI */
+    .fadeable-ui {
+      transition: opacity 0.4s ease;
+      opacity: 1;
+    }
+
+    body.idle-fade .fadeable-ui {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Top Bar */
+    .top-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 20px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 20;
+    }
+
+    .status-tag {
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: #ffffff;
+      background: #141414;
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid #282828;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      outline: none;
+      background: #121212;
+      color: #ffffff;
+      border: 1px solid #282828;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+    button:hover {
+      background: #242424;
+      border-color: #444444;
+    }
+
+    .btn-icon-svg {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      padding: 9px;
+      color: #ffffff;
+    }
+    .btn-icon-svg svg {
+      width: 100%;
+      height: 100%;
+      stroke: #ffffff;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Timer Stage */
+    .timer-stage {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      width: 100%;
+      max-width: 100vw;
+      padding: 0 16px;
+      cursor: pointer;
+    }
+
+    .session-badge {
+      font-size: clamp(1rem, 2vw, 1.6rem);
+      font-weight: 500;
+      color: #888888;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    /* Ultra Big Digits */
+    .timer-digits {
+      font-family: var(--timer-font);
+      font-weight: var(--timer-weight);
+      color: var(--timer-color);
+      font-size: clamp(6.5rem, 28vw, 25rem);
+      line-height: 0.92;
+      letter-spacing: -0.02em;
+      font-variant-numeric: tabular-nums;
+      transition: color 0.2s ease, font-weight 0.2s ease;
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+    }
+
+    .timer-digits .colon {
+      opacity: 0.85;
+      margin: 0 0.02em;
+      position: relative;
+      bottom: 0.04em;
+    }
+
+    /* Next Timer (Subtle & Blurred Preview) */
+    .next-timer-preview {
+      margin-top: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: clamp(0.95rem, 1.8vw, 1.35rem);
+      color: rgba(255, 255, 255, 0.45);
+      background: rgba(20, 20, 20, 0.5);
+      padding: 8px 22px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      transition: all 0.25s ease;
+    }
+
+    .next-timer-preview span.next-time {
+      font-family: var(--timer-font);
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.85);
+    }
+
+    /* Playback Controls */
+    .bottom-bar {
+      position: absolute;
+      bottom: 28px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 14px;
+      z-index: 20;
+    }
+
+    .playback-btn {
+      padding: 12px 26px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-radius: 999px;
+      background: #121212;
+      border: 1px solid #282828;
+      color: #ffffff;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      letter-spacing: 0.02em;
+    }
+    .playback-btn svg {
+      width: 18px;
+      height: 18px;
+      stroke: #ffffff;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .playback-btn.btn-play {
+      background: #ffffff;
+      color: #000000;
+      border-color: #ffffff;
+    }
+    .playback-btn.btn-play svg {
+      stroke: #000000;
+    }
+    .playback-btn.btn-play:hover {
+      background: #e0e0e0;
+    }
+
+    /* Settings Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      z-index: 100;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      background: #0d0d0d;
+      border: 1px solid #222222;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 650px;
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.95);
+      overflow: hidden;
+      transform: scale(0.97);
+      transition: transform 0.2s ease;
+    }
+
+    .modal-backdrop.open .modal-card {
+      transform: scale(1);
+    }
+
+    .modal-header {
+      padding: 16px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1c1c1c;
+      background: #080808;
+    }
+
+    .modal-title {
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .modal-title svg {
+      width: 20px;
+      height: 20px;
+      stroke: #ffffff;
+      fill: none;
+      stroke-width: 2;
+    }
+
+    .modal-body {
+      padding: 22px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 26px;
+    }
+
+    .modal-body::-webkit-scrollbar {
+      width: 5px;
+    }
+    .modal-body::-webkit-scrollbar-thumb {
+      background: #262626;
+      border-radius: 4px;
+    }
+
+    .section-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888888;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Queue items */
+    .queue-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .queue-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #141414;
+      border: 1px solid #222222;
+      border-radius: 10px;
+      padding: 10px 14px;
+      gap: 12px;
+    }
+
+    .queue-row.current-active {
+      border-color: #ffffff;
+      background: #1c1c1c;
+    }
+
+    .row-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+    }
+
+    .row-index {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #242424;
+      font-size: 0.78rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+    }
+    .queue-row.current-active .row-index {
+      background: #ffffff;
+      color: #000000;
+    }
+
+    .row-name {
+      font-weight: 500;
+      font-size: 0.95rem;
+      color: #ffffff;
+    }
+
+    .row-time {
+      font-family: monospace;
+      font-weight: 600;
+      font-size: 1rem;
+      color: #ffffff;
+      background: #000000;
+      padding: 3px 10px;
+      border-radius: 6px;
+      border: 1px solid #282828;
+    }
+
+    .btn-sm-del {
+      background: transparent;
+      border: none;
+      color: #777777;
+      padding: 6px 8px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-sm-del:hover {
+      background: #222222;
+      color: #ffffff;
+    }
+    .btn-sm-del svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+    }
+
+    /* Stepper (- / +) */
+    .stepper-box {
+      background: #141414;
+      border: 1px solid #222222;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .time-steppers-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .stepper-unit {
+      background: #0a0a0a;
+      border: 1px solid #222222;
+      border-radius: 10px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stepper-unit-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: #777777;
+      letter-spacing: 0.05em;
+    }
+
+    .stepper-control-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+    }
+
+    .stepper-btn {
+      width: 36px;
+      height: 36px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      background: #1c1c1c;
+      border-color: #2c2c2c;
+      border-radius: 6px;
+      color: #ffffff;
+    }
+    .stepper-btn:active {
+      transform: scale(0.94);
+    }
+
+    .stepper-number-input {
+      width: 68px;
+      text-align: center;
+      font-size: 1.25rem;
+      font-weight: 600;
+      background: transparent;
+      border: 1px solid #282828;
+      border-radius: 6px;
+      color: #ffffff;
+      padding: 4px;
+      outline: none;
+    }
+    .stepper-number-input:focus {
+      border-color: #ffffff;
+    }
+
+    .label-input-wrapper {
+      display: flex;
+      gap: 10px;
+    }
+
+    .label-input-field {
+      flex: 1;
+      background: #0a0a0a;
+      border: 1px solid #282828;
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #ffffff;
+      font-size: 0.92rem;
+      outline: none;
+    }
+    .label-input-field:focus {
+      border-color: #ffffff;
+    }
+
+    .btn-add-timer {
+      background: #ffffff;
+      color: #000000;
+      font-weight: 600;
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: none;
+    }
+    .btn-add-timer:hover {
+      background: #e0e0e0;
+    }
+
+    /* Style Controls */
+    .style-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .setting-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .setting-row label {
+      font-size: 0.8rem;
+      color: #888888;
+      font-weight: 500;
+    }
+
+    .select-dark {
+      background: #141414;
+      color: #ffffff;
+      border: 1px solid #282828;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-weight: 500;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .weights-selector {
+      display: flex;
+      gap: 8px;
+    }
+
+    .weight-btn-item {
+      flex: 1;
+      padding: 8px;
+      background: #141414;
+      border: 1px solid #282828;
+      color: #888888;
+      font-size: 0.85rem;
+      border-radius: 6px;
+    }
+    .weight-btn-item.active {
+      background: #242424;
+      border-color: #ffffff;
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .swatches-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .swatch-circle {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .swatch-circle:hover {
+      transform: scale(1.15);
+    }
+    .swatch-circle.active {
+      border-color: #ffffff;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    .color-picker-input {
+      width: 32px;
+      height: 32px;
+      border: 1px solid #333333;
+      border-radius: 50%;
+      background: transparent;
+      cursor: pointer;
+      padding: 0;
+      overflow: hidden;
+    }
+    .color-picker-input::-webkit-color-swatch-wrapper { padding: 0; }
+    .color-picker-input::-webkit-color-swatch { border: none; border-radius: 50%; }
+
+    .fade-hint {
+      text-align: center;
+      font-size: 0.72rem;
+      color: #555555;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="top-bar fadeable-ui">
+    <div class="status-tag" id="statusTag">SIAP</div>
+    <div class="top-actions">
+      <!-- Clean Line Audio Icon -->
+      <button class="btn-icon-svg" id="soundToggleBtn" title="Suara Alarm (Nyala/Mati)">
+        <svg id="soundIconOn" viewBox="0 0 24 24">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="none"></polygon>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        </svg>
+        <svg id="soundIconOff" viewBox="0 0 24 24" style="display:none;">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="none"></polygon>
+          <line x1="23" y1="9" x2="17" y2="15"></line>
+          <line x1="17" y1="9" x2="23" y2="15"></line>
+        </svg>
+      </button>
+
+      <!-- Clean Line Fullscreen Icon -->
+      <button class="btn-icon-svg" id="fsToggleBtn" title="Layar Penuh (F11)">
+        <svg viewBox="0 0 24 24">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+        </svg>
+      </button>
+
+      <!-- Clean Line Settings Gear Icon -->
+      <button class="btn-icon-svg" id="settingsGearBtn" title="Pengaturan">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Central Display -->
+  <main class="timer-stage" id="timerStage" title="Klik layar / Spasi untuk Mulai/Jeda">
+    <div class="session-badge" id="sessionBadge">Sesi 1 (1 / 3)</div>
+    
+    <!-- Big Numbers -->
+    <div class="timer-digits" id="timerDigits">
+      <span id="minText">10</span>
+      <span class="colon">:</span>
+      <span id="secText">00</span>
+    </div>
+
+    <!-- Blurred Next Timer -->
+    <div class="next-timer-preview" id="nextPreview">
+      <span>Berikutnya:</span>
+      <span class="next-time" id="nextTimeLabel">Timer 2 (70:00)</span>
+    </div>
+  </main>
+
+  <!-- Bottom Playback Controls -->
+  <footer class="bottom-bar fadeable-ui">
+    <button class="playback-btn btn-play" id="playBtn">
+      <svg id="playIconSvg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"></polygon></svg>
+      <span id="playBtnText">Mulai</span>
+    </button>
+    
+    <button class="playback-btn" id="nextBtn" title="Lompat ke timer berikutnya">
+      <svg viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4" fill="currentColor"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+      <span>Berikutnya</span>
+    </button>
+    
+    <button class="playback-btn" id="resetBtn" title="Kembali ke awal">
+      <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+      <span>Reset</span>
+    </button>
+  </footer>
+
+  <!-- Settings Modal (Clean All-Dark) -->
+  <div class="modal-backdrop" id="settingsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          Pengaturan Timer
+        </div>
+        <button class="btn-sm-del" id="closeModalBtn" style="width:34px; height:34px;">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Section 1: Daftar Urutan -->
+        <div>
+          <div class="section-title">
+            <span>Daftar Urutan Timer (Sequential)</span>
+            <span id="queueCount" style="color:#777;">3 Timer</span>
+          </div>
+          <div class="queue-container" id="queueListEl"></div>
+        </div>
+
+        <!-- Section 2: Stepper Tambah Timer -->
+        <div>
+          <div class="section-title">
+            <span>Tambah Timer Baru</span>
+          </div>
+
+          <div class="stepper-box">
+            <div class="time-steppers-grid">
+              <!-- Stepper Menit -->
+              <div class="stepper-unit">
+                <span class="stepper-unit-label">Menit (Bisa > 60)</span>
+                <div class="stepper-control-row">
+                  <button type="button" class="stepper-btn" id="minMinus10">-10</button>
+                  <button type="button" class="stepper-btn" id="minMinus1">-</button>
+                  <input type="number" id="inputMinutes" class="stepper-number-input" value="10" min="0" max="9999">
+                  <button type="button" class="stepper-btn" id="minPlus1">+</button>
+                  <button type="button" class="stepper-btn" id="minPlus10">+10</button>
+                </div>
+              </div>
+
+              <!-- Stepper Detik -->
+              <div class="stepper-unit">
+                <span class="stepper-unit-label">Detik (0 - 59)</span>
+                <div class="stepper-control-row">
+                  <button type="button" class="stepper-btn" id="secMinus10">-10</button>
+                  <button type="button" class="stepper-btn" id="secMinus1">-</button>
+                  <input type="number" id="inputSeconds" class="stepper-number-input" value="0" min="0" max="59">
+                  <button type="button" class="stepper-btn" id="secPlus1">+</button>
+                  <button type="button" class="stepper-btn" id="secPlus10">+10</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="label-input-wrapper">
+              <input type="text" id="inputLabel" class="label-input-field" placeholder="Nama Label (contoh: Timer 4)">
+              <button class="btn-add-timer" id="btnAddTimer">+ Tambah</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 3: Font, Ketebalan, Warna -->
+        <div>
+          <div class="section-title">
+            <span>Tipografi & Tampilan</span>
+          </div>
+
+          <div class="style-grid">
+            <div class="setting-row">
+              <label for="fontSelect">Font:</label>
+              <select id="fontSelect" class="select-dark">
+                <option value="'Arial Black', sans-serif" selected>Arial Black (Default)</option>
+                <option value="'Impact', sans-serif">Impact (Ultra Bold)</option>
+                <option value="system-ui, -apple-system, sans-serif">System Sans Modern</option>
+                <option value="'Consolas', 'Courier New', monospace">Digital Monospace</option>
+                <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+                <option value="'Georgia', serif">Georgia Serif</option>
+              </select>
+            </div>
+
+            <div class="setting-row">
+              <label>Ketebalan (Weight):</label>
+              <div class="weights-selector">
+                <button type="button" class="weight-btn-item" data-w="300">Light</button>
+                <button type="button" class="weight-btn-item active" data-w="500">Medium (Default)</button>
+                <button type="button" class="weight-btn-item" data-w="700">Bold</button>
+                <button type="button" class="weight-btn-item" data-w="900">Black</button>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <label>Warna Angka:</label>
+              <div class="swatches-row">
+                <div class="swatch-circle active" style="background:#ffffff;" data-c="#ffffff" title="Putih Bersih (Default)"></div>
+                <div class="swatch-circle" style="background:#38bdf8;" data-c="#38bdf8" title="Cyan Sky"></div>
+                <div class="swatch-circle" style="background:#4ade80;" data-c="#4ade80" title="Emerald Green"></div>
+                <div class="swatch-circle" style="background:#facc15;" data-c="#facc15" title="Amber"></div>
+                <div class="swatch-circle" style="background:#f87171;" data-c="#f87171" title="Coral Red"></div>
+                <div class="swatch-circle" style="background:#c084fc;" data-c="#c084fc" title="Neon Purple"></div>
+                <input type="color" id="customColor" class="color-picker-input" value="#ffffff" title="Pilih Bebas">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="fade-hint">
+          * Tombol otomatis fade / menghilang saat timer berjalan atau tidak ada aktivitas kursor.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let timerQueue = [
+      { id: 1, label: "Timer 1", minutes: 10, seconds: 0 },
+      { id: 2, label: "Timer 2", minutes: 70, seconds: 0 },
+      { id: 3, label: "Timer 3", minutes: 10, seconds: 0 }
+    ];
+    let currentIndex = 0;
+    let remainingSeconds = 0;
+    let timerInterval = null;
+    let isRunning = false;
+    let soundEnabled = true;
+
+    // Audio synthesizer
+    let audioCtx = null;
+    function playTone(freq, duration) {
+      if (!soundEnabled) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    function notifySessionChange() {
+      playTone(880, 0.15);
+      setTimeout(() => playTone(1046, 0.18), 160);
+      setTimeout(() => playTone(1318, 0.35), 340);
+    }
+
+    // Elements
+    const minText = document.getElementById('minText');
+    const secText = document.getElementById('secText');
+    const sessionBadge = document.getElementById('sessionBadge');
+    const nextPreview = document.getElementById('nextPreview');
+    const nextTimeLabel = document.getElementById('nextTimeLabel');
+    const statusTag = document.getElementById('statusTag');
+    const playBtn = document.getElementById('playBtn');
+    const playBtnText = document.getElementById('playBtnText');
+    const playIconSvg = document.getElementById('playIconSvg');
+    const nextBtn = document.getElementById('nextBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const settingsGearBtn = document.getElementById('settingsGearBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const queueListEl = document.getElementById('queueListEl');
+    const queueCount = document.getElementById('queueCount');
+    const fsToggleBtn = document.getElementById('fsToggleBtn');
+    const soundToggleBtn = document.getElementById('soundToggleBtn');
+    const soundIconOn = document.getElementById('soundIconOn');
+    const soundIconOff = document.getElementById('soundIconOff');
+    const timerStage = document.getElementById('timerStage');
+
+    // Steppers
+    const inputMinutes = document.getElementById('inputMinutes');
+    const inputSeconds = document.getElementById('inputSeconds');
+    const inputLabel = document.getElementById('inputLabel');
+    const btnAddTimer = document.getElementById('btnAddTimer');
+
+    // Typography & Color
+    const fontSelect = document.getElementById('fontSelect');
+    const weightBtns = document.querySelectorAll('.weight-btn-item');
+    const colorSwatches = document.querySelectorAll('.swatch-circle');
+    const customColor = document.getElementById('customColor');
+
+    // Local Storage
+    function loadSavedQueue() {
+      const saved = localStorage.getItem('oled_multitimer_queue_v2');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) timerQueue = parsed;
+        } catch (e) {}
+      }
+    }
+    function saveQueue() {
+      localStorage.setItem('oled_multitimer_queue_v2', JSON.stringify(timerQueue));
+    }
+
+    function initTimer() {
+      if (timerQueue.length === 0) {
+        remainingSeconds = 0;
+        updateDisplay();
+        return;
+      }
+      if (currentIndex >= timerQueue.length) currentIndex = 0;
+      const current = timerQueue[currentIndex];
+      remainingSeconds = (current.minutes * 60) + current.seconds;
+      updateDisplay();
+      renderQueue();
+    }
+
+    function updateDisplay() {
+      if (timerQueue.length === 0) {
+        minText.textContent = "00";
+        secText.textContent = "00";
+        sessionBadge.textContent = "Antrean Kosong";
+        nextPreview.style.visibility = 'hidden';
+        return;
+      }
+
+      const m = Math.floor(remainingSeconds / 60);
+      const s = remainingSeconds % 60;
+      minText.textContent = m < 10 ? '0' + m : m;
+      secText.textContent = s < 10 ? '0' + s : s;
+
+      const cur = timerQueue[currentIndex];
+      sessionBadge.textContent = `${cur.label || ('Timer ' + (currentIndex + 1))} (${currentIndex + 1} / ${timerQueue.length})`;
+
+      if (currentIndex + 1 < timerQueue.length) {
+        const next = timerQueue[currentIndex + 1];
+        const nm = next.minutes < 10 ? '0' + next.minutes : next.minutes;
+        const ns = next.seconds < 10 ? '0' + next.seconds : next.seconds;
+        nextTimeLabel.textContent = `${next.label || ('Timer ' + (currentIndex + 2))} (${nm}:${ns})`;
+        nextPreview.style.visibility = 'visible';
+      } else {
+        nextTimeLabel.textContent = "Akhir dari antrean";
+        nextPreview.style.visibility = 'visible';
+      }
+    }
+
+    function tick() {
+      if (remainingSeconds > 0) {
+        remainingSeconds--;
+        updateDisplay();
+        if (remainingSeconds <= 3 && remainingSeconds > 0) playTone(700, 0.08);
+      } else {
+        notifySessionChange();
+        if (currentIndex + 1 < timerQueue.length) {
+          currentIndex++;
+          const next = timerQueue[currentIndex];
+          remainingSeconds = (next.minutes * 60) + next.seconds;
+          updateDisplay();
+          renderQueue();
+        } else {
+          pauseTimer();
+          statusTag.textContent = "SELESAI";
+          alert("Semua urutan timer telah selesai!");
+        }
+      }
+    }
+
+    function setPlayButtonState(running) {
+      if (running) {
+        playBtnText.textContent = "Jeda";
+        playIconSvg.innerHTML = '<rect x="6" y="4" width="4" height="16" fill="currentColor"></rect><rect x="14" y="4" width="4" height="16" fill="currentColor"></rect>';
+      } else {
+        playBtnText.textContent = "Mulai";
+        playIconSvg.innerHTML = '<polygon points="5 3 19 12 5 21 5 3" fill="currentColor"></polygon>';
+      }
+    }
+
+    function startTimer() {
+      if (timerQueue.length === 0) {
+        openSettings();
+        return;
+      }
+      if (remainingSeconds <= 0 && currentIndex === timerQueue.length - 1) {
+        currentIndex = 0;
+        initTimer();
+      }
+      if (!isRunning) {
+        isRunning = true;
+        timerInterval = setInterval(tick, 1000);
+        setPlayButtonState(true);
+        statusTag.textContent = "BERJALAN";
+        resetFadeTimer();
+      }
+    }
+
+    function pauseTimer() {
+      if (isRunning) {
+        isRunning = false;
+        clearInterval(timerInterval);
+        setPlayButtonState(false);
+        statusTag.textContent = "JEDA";
+        wakeUI();
+      }
+    }
+
+    function toggleStartPause() {
+      if (isRunning) pauseTimer();
+      else startTimer();
+    }
+
+    function resetTimer() {
+      pauseTimer();
+      currentIndex = 0;
+      initTimer();
+      statusTag.textContent = "SIAP";
+      wakeUI();
+    }
+
+    function skipTimer() {
+      if (timerQueue.length === 0) return;
+      if (currentIndex + 1 < timerQueue.length) {
+        currentIndex++;
+        const next = timerQueue[currentIndex];
+        remainingSeconds = (next.minutes * 60) + next.seconds;
+        updateDisplay();
+        renderQueue();
+      } else {
+        resetTimer();
+      }
+    }
+
+    // Auto-Fade
+    let idleTimeout = null;
+    function wakeUI() {
+      document.body.classList.remove('idle-fade');
+      resetFadeTimer();
+    }
+
+    function resetFadeTimer() {
+      clearTimeout(idleTimeout);
+      if (!settingsModal.classList.contains('open')) {
+        idleTimeout = setTimeout(() => {
+          if (isRunning) {
+            document.body.classList.add('idle-fade');
+          }
+        }, 2500);
+      }
+    }
+
+    window.addEventListener('mousemove', wakeUI);
+    window.addEventListener('touchstart', wakeUI);
+
+    // Queue Render
+    function renderQueue() {
+      queueListEl.innerHTML = '';
+      queueCount.textContent = `${timerQueue.length} Timer`;
+
+      timerQueue.forEach((item, idx) => {
+        const row = document.createElement('div');
+        row.className = `queue-row ${idx === currentIndex ? 'current-active' : ''}`;
+        
+        const mStr = item.minutes < 10 ? '0' + item.minutes : item.minutes;
+        const sStr = item.seconds < 10 ? '0' + item.seconds : item.seconds;
+
+        row.innerHTML = `
+          <div class="row-info" style="cursor:pointer;" title="Pindah ke timer ini">
+            <div class="row-index">${idx + 1}</div>
+            <div class="row-name">${item.label || ('Timer ' + (idx + 1))}</div>
+            <div class="row-time">${mStr}:${sStr}</div>
+          </div>
+          <button class="btn-sm-del" data-idx="${idx}" title="Hapus">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        `;
+
+        row.querySelector('.row-info').addEventListener('click', () => {
+          currentIndex = idx;
+          const target = timerQueue[currentIndex];
+          remainingSeconds = (target.minutes * 60) + target.seconds;
+          updateDisplay();
+          renderQueue();
+        });
+
+        row.querySelector('.btn-sm-del').addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteTimer(idx);
+        });
+
+        queueListEl.appendChild(row);
+      });
+    }
+
+    function deleteTimer(idx) {
+      if (timerQueue.length <= 1) {
+        alert("Minimal sisakan 1 timer dalam antrean.");
+        return;
+      }
+      timerQueue.splice(idx, 1);
+      saveQueue();
+      if (currentIndex >= timerQueue.length) currentIndex = timerQueue.length - 1;
+      initTimer();
+    }
+
+    // Stepper adjust
+    function adjustValue(inputEl, delta, min, max) {
+      let val = (parseInt(inputEl.value, 10) || 0) + delta;
+      if (val < min) val = min;
+      if (max !== undefined && val > max) val = max;
+      inputEl.value = val;
+    }
+
+    document.getElementById('minMinus10').addEventListener('click', () => adjustValue(inputMinutes, -10, 0));
+    document.getElementById('minMinus1').addEventListener('click', () => adjustValue(inputMinutes, -1, 0));
+    document.getElementById('minPlus1').addEventListener('click', () => adjustValue(inputMinutes, 1, 0));
+    document.getElementById('minPlus10').addEventListener('click', () => adjustValue(inputMinutes, 10, 0));
+
+    document.getElementById('secMinus10').addEventListener('click', () => adjustValue(inputSeconds, -10, 0, 59));
+    document.getElementById('secMinus1').addEventListener('click', () => adjustValue(inputSeconds, -1, 0, 59));
+    document.getElementById('secPlus1').addEventListener('click', () => adjustValue(inputSeconds, 1, 0, 59));
+    document.getElementById('secPlus10').addEventListener('click', () => adjustValue(inputSeconds, 10, 0, 59));
+
+    btnAddTimer.addEventListener('click', () => {
+      const min = parseInt(inputMinutes.value, 10) || 0;
+      const sec = parseInt(inputSeconds.value, 10) || 0;
+      const label = inputLabel.value.trim();
+
+      if (min === 0 && sec === 0) {
+        alert("Waktu tidak boleh 0 menit 0 detik.");
+        return;
+      }
+
+      timerQueue.push({
+        id: Date.now(),
+        label: label || `Timer ${timerQueue.length + 1}`,
+        minutes: min,
+        seconds: sec
+      });
+
+      saveQueue();
+      inputLabel.value = '';
+      renderQueue();
+      updateDisplay();
+    });
+
+    // Modal
+    function openSettings() {
+      settingsModal.classList.add('open');
+      wakeUI();
+    }
+    function closeSettings() {
+      settingsModal.classList.remove('open');
+      resetFadeTimer();
+    }
+
+    settingsGearBtn.addEventListener('click', openSettings);
+    closeModalBtn.addEventListener('click', closeSettings);
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) closeSettings();
+    });
+
+    // Font select
+    fontSelect.addEventListener('change', (e) => {
+      document.documentElement.style.setProperty('--timer-font', e.target.value);
+    });
+
+    // Weight select
+    weightBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        weightBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.documentElement.style.setProperty('--timer-weight', btn.getAttribute('data-w'));
+      });
+    });
+
+    // Color select
+    function setColor(color) {
+      document.documentElement.style.setProperty('--timer-color', color);
+      customColor.value = color;
+      colorSwatches.forEach(s => s.classList.toggle('active', s.getAttribute('data-c') === color));
+    }
+
+    colorSwatches.forEach(swatch => {
+      swatch.addEventListener('click', () => setColor(swatch.getAttribute('data-c')));
+    });
+    customColor.addEventListener('input', (e) => setColor(e.target.value));
+
+    // Sound toggle
+    soundToggleBtn.addEventListener('click', () => {
+      soundEnabled = !soundEnabled;
+      if (soundEnabled) {
+        soundIconOn.style.display = 'block';
+        soundIconOff.style.display = 'none';
+      } else {
+        soundIconOn.style.display = 'none';
+        soundIconOff.style.display = 'block';
+      }
+    });
+
+    // Fullscreen
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+      }
+    }
+    fsToggleBtn.addEventListener('click', toggleFullScreen);
+
+    // Stage Click
+    timerStage.addEventListener('click', (e) => {
+      if (e.target.closest('#nextPreview')) {
+        skipTimer();
+        return;
+      }
+      toggleStartPause();
+    });
+
+    playBtn.addEventListener('click', toggleStartPause);
+    nextBtn.addEventListener('click', skipTimer);
+    resetBtn.addEventListener('click', resetTimer);
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        toggleStartPause();
+      } else if (e.code === 'KeyN') {
+        skipTimer();
+      } else if (e.code === 'KeyR') {
+        resetTimer();
+      } else if (e.code === 'KeyF') {
+        toggleFullScreen();
+      } else if (e.code === 'KeyS' || e.code === 'Escape') {
+        if (settingsModal.classList.contains('open')) closeSettings();
+        else if (e.code === 'KeyS') openSettings();
+      }
+    });
+
+    // Init
+    loadSavedQueue();
+    initTimer();
+  </script>
+</body>
+</html>
